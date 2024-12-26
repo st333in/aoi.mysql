@@ -1,5 +1,5 @@
 {
-  "name": "aoi.mariadb",
+  "name": "aoi.mysql",
   "version": "1.0.0-beta",
   "description": "Package which brings MySQL support to aoi.js",
   "main": "./classes/Database.js",

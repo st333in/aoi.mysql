@@ -22,7 +22,7 @@ class Database extends EventEmitter {
           { text: `${err.message}`, textColor: "white" },
         ],
         "white",
-        { text: " aoi.mariadb  ", textColor: "cyan" }
+        { text: " aoi.mysql  ", textColor: "cyan" }
       );
       process.exit(1);
     });
@@ -80,7 +80,7 @@ class Database extends EventEmitter {
             { text: `Installed on v${version}`, textColor: "green" },
           ],
           "white",
-          { text: " aoi.mariadb  ", textColor: "cyan" }
+          { text: " aoi.mysql  ", textColor: "cyan" }
         );
       }
 
@@ -143,12 +143,12 @@ class Database extends EventEmitter {
     let keyValue = id === undefined ? `${key}` : `${key}_${id}`;
   
     if (typeof keyValue !== 'string') {
-      console.warn(`[aoi.mariadb] Invalid keyValue type: Expected string, got ${typeof keyValue}`);
+      console.warn(`[aoi.mysql] Invalid keyValue type: Expected string, got ${typeof keyValue}`);
       return;
     }
   
     if (typeof value !== 'string' && typeof value !== 'number') {
-      console.warn(`[aoi.mariadb] Invalid value type: Expected string or number, got ${typeof value}`);
+      console.warn(`[aoi.mysql] Invalid value type: Expected string or number, got ${typeof value}`);
       return;
     }
   
@@ -247,7 +247,7 @@ class Database extends EventEmitter {
   }
 
   async detectAndAlterFunctions() {
-    const aoiMysqlDir = path.join('.', 'node_modules', 'aoi.mariadb', 'functions');
+    const aoiMysqlDir = path.join('.', 'node_modules', 'aoi.mysql', 'functions');
     const aoiJsDir = path.join('.', 'node_modules', 'aoi.js', 'src', 'functions');
   
     const files = fs.readdirSync(aoiMysqlDir);
@@ -278,7 +278,7 @@ class Database extends EventEmitter {
           { text: `Restarting to apply changes...`, textColor: "red" },
         ],
         "white",
-        { text: " aoi.mariadb  ", textColor: "cyan" }
+        { text: " aoi.mysql  ", textColor: "cyan" }
       );
       process.exit(1);
     }

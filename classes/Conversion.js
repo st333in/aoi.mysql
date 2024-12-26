@@ -5,7 +5,7 @@ const ora = require("ora");
 
 module.exports = async (client, options) => {
   if (!existsSync(join(__dirname, "../../../", options.convertOldData.dir))) {
-    console.error("[aoi.mariadb]: " + chalk.red(`The '${options.convertOldData.dir}' folder does not exist.`));
+    console.error("[aoi.mysql]: " + chalk.red(`The '${options.convertOldData.dir}' folder does not exist.`));
     return;
   }
 
@@ -14,8 +14,8 @@ module.exports = async (client, options) => {
   let total = 0;
   let index = 1;
 
-  console.log("[aoi.mariadb]: " + chalk.green("Starting conversion process..."));
-  console.log("[aoi.mariadb]: " + chalk.green("Code by Faf4a, edited by st333in"));
+  console.log("[aoi.mysql]: " + chalk.green("Starting conversion process..."));
+  console.log("[aoi.mysql]: " + chalk.green("Code by Faf4a, edited by st333in"));
 
   for (const dir of directories) {
     if (["reference", ".backup", "transaction"].includes(dir)) continue;
@@ -32,8 +32,8 @@ module.exports = async (client, options) => {
     }
   }
 
-  console.warn("[aoi.mariadb]: " + chalk.red("This process may take a while depending on the amount of data and database server."));
-  console.log(`[aoi.mariadb]: Found ${chalk.yellow(total)} keys to transfer.`);
+  console.warn("[aoi.mysql]: " + chalk.red("This process may take a while depending on the amount of data and database server."));
+  console.log(`[aoi.mysql]: Found ${chalk.yellow(total)} keys to transfer.`);
 
   for (const dir of directories) {
     if (["reference", ".backup", "transaction"].includes(dir)) continue;
@@ -47,11 +47,11 @@ module.exports = async (client, options) => {
         const databaseData = readFileSync(filePath);
         const data = JSON.parse(databaseData);
 
-        progress = ora("[aoi.mariadb]: Getting ready to backup (this may take a while depending on the amount of data)...\n\r").start();
+        progress = ora("[aoi.mysql]: Getting ready to backup (this may take a while depending on the amount of data)...\n\r").start();
         await new Promise((resolve) => setTimeout(resolve, 1e3));
 
         const tableName = file.split("_scheme_")[0];
-        progress.text = `[aoi.mariadb]: Transferring data from table ${chalk.yellow(tableName)}...`;
+        progress.text = `[aoi.mysql]: Transferring data from table ${chalk.yellow(tableName)}...`;
         await new Promise((resolve) => setTimeout(resolve, 3e3));
         progress.stop();
 
@@ -82,7 +82,7 @@ module.exports = async (client, options) => {
             currentProgress.succeed(`[${index}/${total}] [${end}ms]: ${chalk.yellow(modifiedKey)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
           } catch (error) {
             currentProgress.fail(`[${index}/${total}] [${end}ms]: ${chalk.yellow(modifiedKey)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
-            progress.fail(`[aoi.mariadb]: ${error.message}\n`);
+            progress.fail(`[aoi.mysql]: ${error.message}\n`);
 
             const logPath = join(__dirname, "../../../conversion-logs.txt");
             const logData = `${error.message}\n${JSON.stringify({ key: modifiedKey, value }, null, 2)}\n\n`;
@@ -100,6 +100,6 @@ module.exports = async (client, options) => {
     }
   }
 
-  progress.succeed("[aoi.mariadb]: Transfer completed!");
-  console.warn("[aoi.mariadb]: " + chalk.blue("Disable the convert option, and check if data is equal before delete database files!"));
+  progress.succeed("[aoi.mysql]: Transfer completed!");
+  console.warn("[aoi.mysql]: " + chalk.blue("Disable the convert option, and check if data is equal before delete database files!"));
 };
