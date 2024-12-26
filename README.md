@@ -1,6 +1,6 @@
 ## aoi.js-mysql
 
-- Easy to use package for the implementation of MongoDB in aoi.js with minimal changes.
+- Easy to use package for the implementation of MySQL (MariaDB) in aoi.js with minimal changes.
 
 ### Setup
 
