@@ -78,3 +78,14 @@ client.variables({
 
 // rest of your index.js..
 ```
+
+### Uninstalling
+
+aoi.mysql modifies certain functions of aoi.js, however, when you uninstall this package, make sure you reinstall aoi.js so that everything works perfectly. Follow the example below:
+
+```js
+npm r aoi.mysql
+```
+```js
+npm i aoi.js
+```
