@@ -110,7 +110,7 @@ class Database extends EventEmitter {
   }
 
   async get(table, key, id = undefined) {
-    let keyValue = id ? `${key}_${id}` : key;
+    let keyValue = id === undefined ? `${key}` : `${key}_${id}`;
 
     if (typeof keyValue !== 'string') {
       return null;
@@ -121,7 +121,7 @@ class Database extends EventEmitter {
         `SELECT value FROM ${table} WHERE \`key\` = ?`,
         [keyValue]
       );
-      
+
       let data = rows.length > 0 ? rows[0].value : null;
 
       const aoijs_vars = ["cooldown", "setTimeout", "ticketChannel"];
@@ -140,7 +140,7 @@ class Database extends EventEmitter {
   }
 
   async set(table, key, id, value) {
-    let keyValue = id ? `${key}_${id}` : key;
+    let keyValue = id === undefined ? `${key}` : `${key}_${id}`;
   
     if (typeof keyValue !== 'string') {
       console.warn(`[aoi.mysql] Invalid keyValue type: Expected string, got ${typeof keyValue}`);
@@ -154,8 +154,8 @@ class Database extends EventEmitter {
   
     try {
       await this.client.db.promise().query(
-        `INSERT INTO ${table} (\`key\`, \`value\`) VALUES (?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
-        [keyValue, value, value]
+        `INSERT INTO ${table} (\`var\`, \`key\`, \`value\`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
+        [key, keyValue, value, value]
       );
     } catch (err) {
       console.error('Error executing query:', err);
@@ -193,7 +193,7 @@ class Database extends EventEmitter {
   }
 
   async delete(table, key, id) {
-    let keyValue = id ? `${key}_${id}` : key;
+    let keyValue = id === undefined ? `${key}` : `${key}_${id}`;
 
     try {
       await this.client.db.promise().query(`DELETE FROM ${table} WHERE \`key\` = ?`, [keyValue]);
@@ -239,7 +239,7 @@ class Database extends EventEmitter {
       const [rows] = await this.client.db.promise().query(`SHOW TABLES LIKE ?`, [table]);
 
       if (rows.length === 0) {
-        await this.client.db.promise().query(`CREATE TABLE IF NOT EXISTS ${table} (\`key\` VARCHAR(255) PRIMARY KEY, \`value\` TEXT)`);
+        await this.client.db.promise().query(`CREATE TABLE IF NOT EXISTS ${table} (\`var\` VARCHAR(255), \`key\` VARCHAR(255), \`value\` TEXT, PRIMARY KEY (\`var\`, \`key\`))`);
       }
     } catch (err) {
       return;
