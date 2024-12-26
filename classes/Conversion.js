@@ -59,22 +59,30 @@ module.exports = async (client, options) => {
           const start = process.hrtime.bigint();
           const currentProgress = ora(`[${index}/${total}]: Processing ${chalk.yellow(key)}...`).start();
 
-          const keyWithoutId = key.replace(/_\d+$/, "");
+          const parts = key.split("_");
 
-          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(key)} to '${chalk.cyan(value.value).slice(0, 15)}'`;
+          const varKey = parts[0];
+
+          let modifiedKey = key;
+
+          if (parts.length === 1 || parts[1] === "") {
+            modifiedKey = varKey;
+          }
+
+          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(modifiedKey)} to '${chalk.cyan(value.value).slice(0, 15)}'`;
 
           const end = (Number(process.hrtime.bigint() - start) / 1e6).toFixed(2);
 
           try {
             await client.db.promise().query(
-              `INSERT INTO ${tableName} (\`key\`, \`value\`) VALUES (?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
-              [key, value.value, value.value]
+              `INSERT INTO ${tableName} (\`var\`, \`key\`, \`value\`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
+              [varKey, modifiedKey, value.value, value.value]
             );
             
-            currentProgress.succeed(`[${index}/${total}] [${end}ms]: ${chalk.yellow(key)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
+            currentProgress.succeed(`[${index}/${total}] [${end}ms]: ${chalk.yellow(modifiedKey)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
 
           } catch (error) {
-            currentProgress.fail(`[${index}/${total}] [${end}ms]: ${chalk.yellow(key)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
+            currentProgress.fail(`[${index}/${total}] [${end}ms]: ${chalk.yellow(modifiedKey)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
             progress.fail(`[aoi.mysql]: ${error.message}\n`);
           }
 
