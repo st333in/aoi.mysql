@@ -14,7 +14,7 @@ module.exports = async (d) => {
     let cooldown = await d.client.db.get(
         "__aoijs_vars__",
         "cooldown",
-        `${d.command.name}_${d.channel.id}`,
+        `${d.command.name}_${d.guild?.id || "dm"}`,
     );
     cooldown = cooldown;
 
@@ -23,7 +23,7 @@ module.exports = async (d) => {
         d.client.db.set(
             "__aoijs_vars__",
             "cooldown",
-            `${d.command.name}_${d.channel.id}`,
+            `${d.command.name}_${d.guild?.id || "dm"}`,
             cooldown,
         );
     } else if (Date.now() < cooldown) {
@@ -59,7 +59,7 @@ module.exports = async (d) => {
         d.client.db.set(
             "__aoijs_vars__",
             "cooldown",
-            `${d.command.name}_${d.channel.id}`,
+            `${d.command.name}_${d.guild?.id || "dm"}`,
             cooldown,
         );
     }
