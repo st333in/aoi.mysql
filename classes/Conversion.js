@@ -60,27 +60,26 @@ module.exports = async (client, options) => {
           const currentProgress = ora(`[${index}/${total}]: Processing ${chalk.yellow(key)}...`).start();
 
           const parts = key.split("_");
-
           const varKey = parts[0];
-
           let modifiedKey = key;
 
           if (parts.length === 1 || parts[1] === "") {
             modifiedKey = varKey;
           }
 
-          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(modifiedKey)} to '${chalk.cyan(value.value).slice(0, 15)}'`;
+          const serializedValue = typeof value.value === "object" ? JSON.stringify(value.value) : value.value;
+
+          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(modifiedKey)} to '${serializedValue.slice(0, 15)}'`;
 
           const end = (Number(process.hrtime.bigint() - start) / 1e6).toFixed(2);
 
           try {
             await client.db.promise().query(
               `INSERT INTO ${tableName} (\`var\`, \`key\`, \`value\`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
-              [varKey, modifiedKey, value.value, value.value]
+              [varKey, modifiedKey, serializedValue, serializedValue]
             );
 
             currentProgress.succeed(`[${index}/${total}] [${end}ms]: ${chalk.yellow(modifiedKey)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
-
           } catch (error) {
             currentProgress.fail(`[${index}/${total}] [${end}ms]: ${chalk.yellow(modifiedKey)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
             progress.fail(`[aoi.mysql]: ${error.message}\n`);
