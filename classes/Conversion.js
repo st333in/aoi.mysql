@@ -1,4 +1,4 @@
-const { readFileSync, readdirSync, existsSync, statSync } = require("fs");
+const { readFileSync, readdirSync, existsSync, statSync, appendFileSync, writeFileSync } = require("fs");
 const { join } = require("path");
 const chalk = require("chalk");
 const ora = require("ora");
@@ -78,12 +78,21 @@ module.exports = async (client, options) => {
               `INSERT INTO ${tableName} (\`var\`, \`key\`, \`value\`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
               [varKey, modifiedKey, value.value, value.value]
             );
-            
+
             currentProgress.succeed(`[${index}/${total}] [${end}ms]: ${chalk.yellow(modifiedKey)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
 
           } catch (error) {
             currentProgress.fail(`[${index}/${total}] [${end}ms]: ${chalk.yellow(modifiedKey)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
             progress.fail(`[aoi.mysql]: ${error.message}\n`);
+
+            const logPath = join(__dirname, "../../../conversion-logs.txt");
+            const logData = `${error.message}\n${JSON.stringify({ key: modifiedKey, value }, null, 2)}\n\n`;
+
+            if (!existsSync(logPath)) {
+              writeFileSync(logPath, logData);
+            } else {
+              appendFileSync(logPath, logData);
+            }
           }
 
           index++;
