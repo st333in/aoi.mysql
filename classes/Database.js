@@ -15,9 +15,6 @@ class Database extends EventEmitter {
     this.detectAndAlterFunctions();
 
     this.connect().then(async () => {
-      if (this.options.convertOldData.enabled === true) {
-        await this.transfer();
-      }
     }).catch(err => {
       AoiError.createConsoleMessage(
         [
@@ -95,6 +92,10 @@ class Database extends EventEmitter {
 
     } catch (err) {
       throw new Error(`${err.message}`);
+    }
+
+    if (this.options.convertOldData.enabled === true) {
+      await this.transfer();
     }
   }
 
