@@ -202,14 +202,14 @@ class Database extends EventEmitter {
     }
   }
 
-  async findMany(table, query, limit) {
+  async findMany(table, query, limit = 10) {
     try {
-      const [rows] = await this.client.db.promise().query(`SELECT * FROM ${table} WHERE \`key\` LIKE ? LIMIT ?`, [query, limit]);
-      return rows;
+        const [rows] = await this.client.db.promise().query(`SELECT * FROM ${table} WHERE \`key\` LIKE ? LIMIT ?`, [query, limit]);
+        return rows;
     } catch (err) {
-      return [];
+        return [];
     }
-  }
+  } 
 
   async all(table, filter, list = 100, sort = "asc") {
     try {
