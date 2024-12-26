@@ -1,10 +1,10 @@
-## aoi.js-mongo
+## aoi.js-mysql
 
 - Easy to use package for the implementation of MongoDB in aoi.js with minimal changes.
 
 ### Setup
 
-To get started with aoi.js-mongo, we have to do a couple things.
+To get started with aoi.js-mysql, we have to do a couple things.
 
 - Install the package.
 ```bash
