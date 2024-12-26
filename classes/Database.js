@@ -247,34 +247,31 @@ class Database extends EventEmitter {
   }
 
   async detectAndAlterFunctions() {
-    const dir = path.join('.', "node_modules", "aoi.js", "src", "functions");
-
-    const filesvar = fs.readdirSync(dir).filter(file => file.endsWith("Var.js"));
-    const filescooldown = fs.readdirSync(dir).filter(file => file.startsWith("cooldown") || file.endsWith("Cooldown.js"));
+    const aoiMysqlDir = path.join('.', 'node_modules', 'aoi.mysql', 'functions');
+    const aoiJsDir = path.join('.', 'node_modules', 'aoi.js', 'src', 'functions');
+  
+    const files = fs.readdirSync(aoiMysqlDir);
+  
     let altered = false;
-
-    for (const file of filesvar) {
-      const filePath = path.join(dir, file);
-      const content = fs.readFileSync(filePath, "utf8");
-
-      if (content.includes("?.value ??")) {
+  
+    for (const file of files) {
+      const aoiMysqlFilePath = path.join(aoiMysqlDir, file);
+      const aoiJsFilePath = path.join(aoiJsDir, file);
+  
+      if (fs.existsSync(aoiJsFilePath)) {
+        const aoiMysqlContent = fs.readFileSync(aoiMysqlFilePath, 'utf8');
+        const aoiJsContent = fs.readFileSync(aoiJsFilePath, 'utf8');
+  
+        if (aoiMysqlContent !== aoiJsContent) {
+          altered = true;
+          fs.copyFileSync(aoiMysqlFilePath, aoiJsFilePath);
+        }
+      } else {
         altered = true;
-        const updatedContent = content.replace("?.value ??", "??");
-        fs.writeFileSync(filePath, updatedContent, "utf8");
+        fs.copyFileSync(aoiMysqlFilePath, aoiJsFilePath);
       }
     }
-
-    for (const file of filescooldown) {
-      const filePath = path.join(dir, file);
-      const content = fs.readFileSync(filePath, "utf8");
-
-      if (content.includes("cooldown?.value")) {
-        altered = true;
-        const updatedContent = content.replace("cooldown?.value", "cooldown");
-        fs.writeFileSync(filePath, updatedContent, "utf8");
-      }
-    }
-
+  
     if (altered) {
       AoiError.createConsoleMessage(
         [
