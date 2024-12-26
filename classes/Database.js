@@ -1,34 +1,57 @@
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const mysql = require("mysql2");
 const AoiError = require("aoi.js/src/classes/AoiError");
 const Interpreter = require("aoi.js/src/core/interpreter.js");
 const EventEmitter = require("events");
+const fs = require("fs");
+const path = require("path");
+
 class Database extends EventEmitter {
   constructor(client, options) {
     super();
-
     this.client = client;
     this.options = options;
     this.debug = this.options.debug ?? false;
 
-    this.connect();
+    this.detectAndAlterFunctions();
+
+    this.connect().then(async () => {
+      if (this.options.convertOldData.enabled === true) {
+        await this.transfer();
+      }
+    }).catch(err => {
+      AoiError.createConsoleMessage(
+        [
+          { text: `Failed to connect to MariaDB`, textColor: "red" },
+          { text: `${err.message}`, textColor: "white" },
+        ],
+        "white",
+        { text: " aoi.mysql  ", textColor: "cyan" }
+      );
+      process.exit(1);
+    });
   }
 
   async connect() {
     try {
-      this.client.db = new MongoClient(this.options.url, {
-        serverApi: {
-          version: ServerApiVersion.v1,
-          strict: true,
-          deprecationErrors: false
-        },
-        connectTimeoutMS: 15000
+      this.client.db = mysql.createPool({
+        host: this.options.host,
+        user: this.options.user,
+        password: this.options.password,
+        database: this.options.database,
+        port: this.options.port || 3306,
+        connectionLimit: 10,
       });
 
-      if (!this.options.tables || this.options?.tables.length === 0) throw new TypeError("Missing variable tables, please provide at least one table.");
-      if (this.options.tables.includes("__aoijs_vars__")) throw new TypeError("'__aoijs_vars__' is reserved as a table name.");
+      if (!this.options.tables || this.options?.tables.length === 0) {
+        throw new TypeError("Missing variable tables, please provide at least one table.");
+      }
+
+      if (this.options.tables.includes("__aoijs_vars__")) {
+        throw new TypeError("'__aoijs_vars__' is reserved as a table name.");
+      }
+
       this.client.db.tables = [...this.options.tables, "__aoijs_vars__"];
 
-      //bind
       this.client.db.get = this.get.bind(this);
       this.client.db.set = this.set.bind(this);
       this.client.db.drop = this.drop.bind(this);
@@ -37,246 +60,230 @@ class Database extends EventEmitter {
       this.client.db.findOne = this.findOne.bind(this);
       this.client.db.findMany = this.findMany.bind(this);
       this.client.db.all = this.all.bind(this);
+      this.client.db.db = {}; 
       this.client.db.db.transfer = this.transfer.bind(this);
       this.client.db.db.avgPing = this.ping.bind(this);
 
       this.client.db.db.readyAt = Date.now();
 
-      await this.client.db.connect();
+      await this.ping();
 
-      if (this.options.logging != false) {
-        const latency = await this.client.db.db.avgPing();
-        const { version } = require("../package.json");
-        if (latency != "-1") {
-          AoiError.createConsoleMessage(
-            [
-              {
-                text: `Successfully connected to MongoDB`,
-                textColor: "white"
-              },
-              {
-                text: `Cluster Latency: ${latency}ms`,
-                textColor: "white"
-              },
-              {
-                text: `Installed on v${version}`,
-                textColor: "green"
-              }
-            ],
-            "white",
-            { text: " aoi.js-mongo  ", textColor: "cyan" }
-          );
-        }
+      const pingResult = await this.ping();
+
+      if (pingResult instanceof Error) {
+        throw new Error(`(${pingResult.code}) ${pingResult.message}`);
       }
 
-      const client = this.client;
+      if (this.options.logging !== false) {
+        const { version } = require("../package.json");
+        AoiError.createConsoleMessage(
+          [
+            { text: `Successfully connected to MariaDB`, textColor: "white" },
+            { text: `Server Latency: ${pingResult}ms`, textColor: "white" },
+            { text: `Installed on v${version}`, textColor: "green" },
+          ],
+          "white",
+          { text: " aoi.mysql  ", textColor: "cyan" }
+        );
+      }
 
-      this.client.once("ready", async () => {
-        await require("aoi.js/src/events/Custom/timeout.js")({ client, interpreter: Interpreter }, undefined, undefined, true);
-
-        setInterval(async () => {
-          await require("aoi.js/src/events/Custom/handleResidueData.js")(client);
-        }, 3.6e6);
-      });
+      for (const table of this.client.db.tables) {
+        await this.checkAndCreateTable(table);
+      }
 
       this.emit("ready", { client: this.client });
-    } catch (err) {
-      AoiError.createConsoleMessage(
-        [
-          {
-            text: `Failed to connect to MongoDB`,
-            textColor: "red"
-          },
-          {
-            text: err.message,
-            textColor: "white"
-          }
-        ],
-        "white",
-        { text: " aoi.mongo  ", textColor: "cyan" }
-      );
-      process.exit(0);
-    }
 
-    if (this.options?.convertOldData?.enabled == true) {
-      this.client.once("ready", () => {
-        require("./backup")(this.client, this.options);
-      });
+    } catch (err) {
+      throw new Error(`${err.message}`);
     }
   }
 
   async ping() {
     let start = Date.now();
-    const res = await this.client.db.db("admin").command({ ping: 1 });
-    if (!res.ok) return -1;
-    return Date.now() - start;
+    try {
+      await this.client.db.promise().query("SELECT 1");
+      return Date.now() - start;
+    } catch (err) {
+      return err;
+    }
   }
 
   async get(table, key, id = undefined) {
-    const col = this.client.db.db(table).collection(key);
-    const aoijs_vars = ["cooldown", "setTimeout", "ticketChannel"];
-    let keyValue = key;
-    if (id) keyValue = `${key}_${id}`;
+    let keyValue = id ? `${key}_${id}` : key;
 
-    if (this.debug == true) {
-      console.debug(`[received] get(${table}, ${keyValue})`);
+    if (typeof keyValue !== 'string') {
+      return null;
     }
 
-    let data;
-    if (aoijs_vars.includes(key)) {
-      data = await col.findOne({ key: keyValue });
-    } else {
-      if (!this.client.variableManager.has(key, table)) return;
-      const __var = this.client.variableManager.get(key, table)?.default;
-      data = (await col.findOne({ key: keyValue })) || __var;
-    }
+    try {
+      const [rows] = await this.client.db.promise().query(
+        `SELECT value FROM ${table} WHERE \`key\` = ?`,
+        [keyValue]
+      );
+      
+      let data = rows.length > 0 ? rows[0].value : null;
 
-    if (this.debug == true) {
-      console.debug(`[returning] get(${table}, ${keyValue}) -> ${typeof data === "object" ? JSON.stringify(data) : data}`);
-    }
+      const aoijs_vars = ["cooldown", "setTimeout", "ticketChannel"];
+      if (aoijs_vars.includes(key)) {
+        data = rows.length > 0 ? rows[0].value : null;
+      } else {
+        if (!this.client.variableManager.has(key, table)) return null;
+        const __var = this.client.variableManager.get(key, table)?.default;
+        data = data || __var;
+      }
 
-    return data;
+      return data;
+    } catch (err) {
+      return null;
+    }
   }
 
   async set(table, key, id, value) {
-    let keyValue = key;
-    if (id) keyValue = `${key}_${id}`;
-
-    if (this.debug === true) {
-      console.debug(`[received] set(${table}, ${keyValue}, ${typeof value === "object" ? JSON.stringify(value) : value})`);
+    let keyValue = id ? `${key}_${id}` : key;
+  
+    if (typeof keyValue !== 'string') {
+      console.warn(`[aoi.mysql] Invalid keyValue type: Expected string, got ${typeof keyValue}`);
+      return;
     }
-
-    const col = this.client.db.db(table).collection(key);
-    await col.updateOne({ key: keyValue }, { $set: { value: value } }, { upsert: true });
-
-    if (this.debug === true) {
-      console.debug(`[returning] set(${table}, ${keyValue}, ${typeof value === "object" ? JSON.stringify(value) : value})`);
+  
+    if (typeof value !== 'string' && typeof value !== 'number') {
+      console.warn(`[aoi.mysql] Invalid value type: Expected string or number, got ${typeof value}`);
+      return;
     }
-  }
+  
+    try {
+      await this.client.db.promise().query(
+        `INSERT INTO ${table} (\`key\`, \`value\`) VALUES (?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
+        [keyValue, value, value]
+      );
+    } catch (err) {
+      console.error('Error executing query:', err);
+      return;
+    }
+  }  
 
   async drop(table, variable) {
-    if (this.debug == true) {
-      console.debug(`[received] drop(${table}, ${variable})`);
-    }
-    if (variable) {
-      await this.client.db.db(table).collection(variable).drop();
-    } else {
-      await this.client.db.db(table).dropDatabase();
-    }
-
-    if (this.debug == true) {
-      console.debug(`[returning] drop(${table}, ${variable}) -> dropped ${table}`);
+    try {
+      if (variable) {
+        await this.client.db.promise().query(`DROP TABLE IF EXISTS ${variable}`);
+      } else {
+        await this.client.db.promise().query(`DROP DATABASE IF EXISTS ${table}`);
+      }
+    } catch (err) {
+      return;
     }
   }
 
   async findOne(table, query) {
-    const col = this.client.db.db(table).collection(query);
-    return await col.findOne({}, { value: 1, _id: 0 });
+    try {
+      const [rows] = await this.client.db.promise().query(`SELECT * FROM ${table} WHERE \`key\` = ?`, [query]);
+      return rows[0] || null;
+    } catch (err) {
+      return null;
+    }
   }
 
   async deleteMany(table, query) {
-    if (this.debug == true) {
-      console.debug(`[received] deleteMany(${table}, ${query})`);
-    }
-
-    const db = this.client.db.db(table);
-    const collections = await db.listCollections().toArray();
-
-    for (let collection of collections) {
-      const col = db.collection(collection.name);
-      if (this.debug == true) {
-        const data = await col.find({ q: query }).toArray();
-        console.debug(`[returning] deleteMany(${table}, ${query}) -> ${data}`);
-      }
-
-      await col.deleteMany({ q: query });
-    }
-    if (this.debug == true) {
-      console.debug(`[returning] deleteMany(${table}, ${query}) -> deleted`);
+    try {
+      await this.client.db.promise().query(`DELETE FROM ${table} WHERE \`key\` LIKE ?`, [`${query}%`]);
+    } catch (err) {
+      return;
     }
   }
 
   async delete(table, key, id) {
-    if (id) key = `${key}_${id}`;
-    else key = key;
+    let keyValue = id ? `${key}_${id}` : key;
 
-    if (this.debug == true) {
-      console.debug(`[received] delete(${table}, ${key})`);
-    }
-    const db = this.client.db.db(table);
-    const collections = await db.listCollections().toArray();
-
-    for (let collection of collections) {
-      const col = db.collection(collection.name);
-      const doc = await col.findOne({ key });
-
-      if (!doc) continue;
-
-      if (this.debug == true) {
-        console.debug(`[returning] delete(${table}, ${key}) -> ${doc.value}`);
-      }
-
-      await col.deleteOne({ key });
-      break;
-    }
-    if (this.debug == true) {
-      console.debug(`[returned] delete(${table}, ${key}) -> deleted`);
+    try {
+      await this.client.db.promise().query(`DELETE FROM ${table} WHERE \`key\` = ?`, [keyValue]);
+    } catch (err) {
+      return;
     }
   }
 
   async findMany(table, query, limit) {
-    const db = this.client.db.db(table);
-    const collections = await db.listCollections().toArray();
-    let results = [];
-
-    for (let collection of collections) {
-      const col = db.collection(collection.name);
-      let data;
-
-      if (typeof query === "function") {
-        data = await col.find({}).toArray();
-        data = data.filter(query);
-      } else {
-        data = await col.find(query).toArray();
-      }
-
-      if (limit) {
-        data = data.slice(0, limit);
-      }
-
-      results.push(...data);
+    try {
+      const [rows] = await this.client.db.promise().query(`SELECT * FROM ${table} WHERE \`key\` LIKE ? LIMIT ?`, [query, limit]);
+      return rows;
+    } catch (err) {
+      return [];
     }
-
-    return results;
   }
 
   async all(table, filter, list = 100, sort = "asc") {
-    const db = this.client.db.db(table);
-    const collections = await db.listCollections().toArray();
-    let results = [];
-    if (this.debug == true) {
-      console.debug(`[received] all(${table}, ${filter}, ${list}, ${sort})`);
+    try {
+      const [rows] = await this.client.db.promise().query(`SELECT * FROM ${table} WHERE \`key\` LIKE ? LIMIT ?`, [filter, list]);
+      rows.sort((a, b) => (sort === "asc" ? a.value - b.value : b.value - a.value));
+      return rows;
+    } catch (err) {
+      return [];
     }
-    for (let collection of collections) {
-      const col = db.collection(collection.name);
-      let data = await col.find({}).toArray();
-      data = data.filter(filter);
-      results.push(...data);
-    }
-
-    if (sort === "asc") {
-      results.sort((a, b) => a.value - b.value);
-    } else if (sort === "desc") {
-      results.sort((a, b) => b.value - a.value);
-    }
-    if (this.debug == true) {
-      console.debug(`[returning] all(${table}, ${filter}, ${list}, ${sort}) -> ${JSON.stringify(results)} items`);
-    }
-    return results.slice(0, list);
   }
 
   async transfer() {
-    require("./backup")(this.client, this.options);
+    const backupFilePath = path.join(__dirname, "Conversion.js");
+
+    if (fs.existsSync(backupFilePath)) {
+      try {
+        const backup = require(backupFilePath);
+        backup(this.client, this.options);
+      } catch (error) {
+        return;
+      }
+    }
+  }
+
+  async checkAndCreateTable(table) {
+    try {
+      const [rows] = await this.client.db.promise().query(`SHOW TABLES LIKE ?`, [table]);
+
+      if (rows.length === 0) {
+        await this.client.db.promise().query(`CREATE TABLE IF NOT EXISTS ${table} (\`key\` VARCHAR(255) PRIMARY KEY, \`value\` TEXT)`);
+      }
+    } catch (err) {
+      return;
+    }
+  }
+
+  async detectAndAlterFunctions() {
+    const dir = path.join('.', "node_modules", "aoi.js", "src", "functions");
+
+    const filesvar = fs.readdirSync(dir).filter(file => file.endsWith("Var.js"));
+    const filescooldown = fs.readdirSync(dir).filter(file => file.startsWith("cooldown") || file.endsWith("Cooldown.js"));
+    let altered = false;
+
+    for (const file of filesvar) {
+      const filePath = path.join(dir, file);
+      const content = fs.readFileSync(filePath, "utf8");
+
+      if (content.includes("?.value ??")) {
+        altered = true;
+        const updatedContent = content.replace("?.value ??", "??");
+        fs.writeFileSync(filePath, updatedContent, "utf8");
+      }
+    }
+
+    for (const file of filescooldown) {
+      const filePath = path.join(dir, file);
+      const content = fs.readFileSync(filePath, "utf8");
+
+      if (content.includes("cooldown?.value")) {
+        altered = true;
+        const updatedContent = content.replace("cooldown?.value", "cooldown");
+        fs.writeFileSync(filePath, updatedContent, "utf8");
+      }
+    }
+
+    if (altered) {
+      AoiError.createConsoleMessage(
+        [
+          { text: `Restarting to apply changes...`, textColor: "red" },
+        ],
+        "white",
+        { text: " aoi.mysql  ", textColor: "cyan" }
+      );
+      process.exit(1);
+    }
   }
 }
 
