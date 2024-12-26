@@ -8,14 +8,14 @@ To get started with aoi.js-mongo, we have to do a couple things.
 
 - Install the package.
 ```bash
-npm install github:faf4a/aoi.mongo
+npm install github:st333in/aoi.mysql
 ```
 
 - Update your index.js file.
 
 ```js
 const { AoiClient, LoadCommands } = require("aoi.js");
-const { Database } = require("aoi.mongo");
+const { Database } = require("aoi.mysql");
 
 const client = new AoiClient({
   token: "DISCORD BOT TOKEN",
@@ -26,9 +26,13 @@ const client = new AoiClient({
 });
 
 const database = new Database(client, {
-    url: "mongodb+srv://...", // your mongoDB server uri
-    tables: ["main"],
-    logging: true // enables or disables logs
+  host: " ",        
+  user: " ", 
+  password: " ",
+  database: " ",
+  port: 3306, //Not required, default 3306
+  connectionLimit: 20,
+  tables: ["main"]
 });
 
 client.variables({
@@ -55,9 +59,13 @@ const client = new AoiClient({
 });
 
 const database = new Database(client, {
-    url: "mongodb+srv://...", // your mongoDB server uri
-    tables: ["main"],
-    logging: true, // enables or disables logs
+  host: " ",        
+  user: " ", 
+  password: " ",
+  database: " ",
+  port: 3306, //Not required, default 3306
+  connectionLimit: 20,
+  tables: ["main"],
     convertOldData: {
       enabled: true,
       dir: "./database"
@@ -70,30 +78,3 @@ client.variables({
 
 // rest of your index.js..
 ```
-
-### Want to keep aoi.db?
-
-Then use https://github.com/NanotechPikachu/aoi.mongodb this version made by [NanotechPikachu](https://github.com/NanotechPikachu)!
-
-### MongoDB URI
-
-- How do I get one?
-
-You need to be registered at https://cloud.mongodb.com/, and create a database accordingly, after you did so follow the steps below:
-
-![https://i.imgur.com/sibh7dA.png](https://i.imgur.com/sibh7dA.png)
-
-![https://i.imgur.com/YerNHad.png](https://i.imgur.com/YerNHad.png)
-
-![https://i.imgur.com/ZTMbq4h.png](https://i.imgur.com/ZTMbq4h.png)
-
-Then paste it in the **URL** field of the database setup, and you're pretty much done!
-
-#### Server Connection Timeout
-
-> [!IMPORTANT]
-> This is NOT recommended to do as it'll allow anyone to connect to your database. Only do this if your host changes your IP regularly. Otherwise provide the specific IP or a wildcard!
-
-- Make sure you allowed ALL IPS to connect to your mongoDB server.
-
-`Security` -> `Network Access` -> `Allow all IPs`
