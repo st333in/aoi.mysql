@@ -8,14 +8,14 @@ To get started with aoi.js-mysql, we have to do a couple things.
 
 - Install the package.
 ```bash
-npm install github:st333in/aoi.mysql
+npm install github:st333in/aoi.mariadb
 ```
 
 - Update your index.js file.
 
 ```js
 const { AoiClient, LoadCommands } = require("aoi.js");
-const { Database } = require("aoi.mysql");
+const { Database } = require("aoi.mariadb");
 
 const client = new AoiClient({
   token: "DISCORD BOT TOKEN",
@@ -81,10 +81,10 @@ client.variables({
 
 ### Uninstalling
 
-aoi.mysql modifies certain functions of aoi.js, however, when you uninstall this package, make sure you reinstall aoi.js so that everything works perfectly. Follow the example below:
+aoi.mariadb modifies certain functions of aoi.js, however, when you uninstall this package, make sure you reinstall aoi.js so that everything works perfectly. Follow the example below:
 
 ```js
-npm r aoi.mysql
+npm r aoi.mariadb
 ```
 ```js
 npm i aoi.js
