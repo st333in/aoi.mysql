@@ -139,29 +139,31 @@ class Database extends EventEmitter {
     }
   }
 
-  async set(table, key, id, value) {
+async set(table, key, id, value) {
     let keyValue = id === undefined ? `${key}` : `${key}_${id}`;
   
     if (typeof keyValue !== 'string') {
-      console.warn(`[aoi.mysql] Invalid keyValue type: Expected string, got ${typeof keyValue}`);
-      return;
+        console.warn(`[aoi.mysql] Invalid keyValue type: Expected string, got ${typeof keyValue}`);
+        return;
     }
-  
-    if (typeof value !== 'string' && typeof value !== 'number') {
-      console.warn(`[aoi.mysql] Invalid value type: Expected string or number, got ${typeof value}`);
-      return;
+
+    if (typeof value === 'object') {
+        value = JSON.stringify(value);
+    } else if (typeof value !== 'string' && typeof value !== 'number') {
+        console.warn(`[aoi.mysql] Invalid value type: Expected string, number, or object, got ${typeof value}`);
+        return;
     }
-  
+
     try {
-      await this.client.db.promise().query(
-        `INSERT INTO ${table} (\`var\`, \`key\`, \`value\`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
-        [key, keyValue, value, value]
-      );
+        await this.client.db.promise().query(
+            `INSERT INTO ${table} (\`var\`, \`key\`, \`value\`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
+            [key, keyValue, value, value]
+        );
     } catch (err) {
-      console.error('Error executing query:', err);
-      return;
+        console.error('Error executing query:', err);
+        return;
     }
-  }  
+}
 
   async drop(table, variable) {
     try {
