@@ -67,9 +67,9 @@ module.exports = async (client, options) => {
             modifiedKey = varKey;
           }
 
-          const serializedValue = typeof value.value === "object" ? JSON.stringify(value.value) : value.value;
-
-          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(modifiedKey)} to '${serializedValue.slice(0, 15)}'`;
+          const previewValue = typeof serializedValue === "string" ? serializedValue.slice(0, 15) : JSON.stringify(serializedValue).slice(0, 15);
+ 
+          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(modifiedKey)} to '${previewValue}'`;          
 
           const end = (Number(process.hrtime.bigint() - start) / 1e6).toFixed(2);
 
