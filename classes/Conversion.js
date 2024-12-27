@@ -4,13 +4,13 @@ const chalk = require("chalk");
 const ora = require("ora");
 
 module.exports = async (client, options) => {
-  if (!existsSync(join(__dirname, "../../../", options.convertOldData.dir))) {
+  const baseDir = join(__dirname, "../../../", options.convertOldData.dir);
+  if (!existsSync(baseDir)) {
     console.error("[aoi.mysql]: " + chalk.red(`The '${options.convertOldData.dir}' folder does not exist.`));
     return;
   }
 
-  const directories = readdirSync(join(__dirname, "../../../", options.convertOldData.dir));
-  let progress;
+  const directories = readdirSync(baseDir);
   let total = 0;
   let index = 1;
 
@@ -19,7 +19,7 @@ module.exports = async (client, options) => {
 
   for (const dir of directories) {
     if (["reference", ".backup", "transaction"].includes(dir)) continue;
-    const dirPath = join(__dirname, "../../../", options.convertOldData.dir, dir);
+    const dirPath = join(baseDir, dir);
 
     if (statSync(dirPath).isDirectory()) {
       const files = readdirSync(dirPath);
@@ -37,7 +37,7 @@ module.exports = async (client, options) => {
 
   for (const dir of directories) {
     if (["reference", ".backup", "transaction"].includes(dir)) continue;
-    const dirPath = join(__dirname, "../../../", options.convertOldData.dir, dir);
+    const dirPath = join(baseDir, dir);
 
     if (statSync(dirPath).isDirectory()) {
       const files = readdirSync(dirPath);
@@ -47,12 +47,12 @@ module.exports = async (client, options) => {
         const databaseData = readFileSync(filePath);
         const data = JSON.parse(databaseData);
 
-        progress = ora("[aoi.mysql]: Getting ready to backup (this may take a while depending on the amount of data)...\n\r").start();
-        await new Promise((resolve) => setTimeout(resolve, 1e3));
+        const progress = ora("[aoi.mysql]: Getting ready to backup (this may take a while depending on the amount of data)...\n\r").start();
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         const tableName = file.split("_scheme_")[0];
         progress.text = `[aoi.mysql]: Transferring data from table ${chalk.yellow(tableName)}...`;
-        await new Promise((resolve) => setTimeout(resolve, 3e3));
+        await new Promise((resolve) => setTimeout(resolve, 3000));
         progress.stop();
 
         for (const [key, value] of Object.entries(data)) {
@@ -61,15 +61,12 @@ module.exports = async (client, options) => {
 
           const parts = key.split("_");
           const varKey = parts[0];
-          let modifiedKey = key;
+          const modifiedKey = parts.length === 1 || parts[1] === "" ? varKey : key;
 
-          if (parts.length === 1 || parts[1] === "") {
-            modifiedKey = varKey;
-          }
+          const serializedValue = typeof value.value === "object" ? JSON.stringify(value.value) : String(value.value);
+          const previewValue = serializedValue.slice(0, 15);
 
-          const previewValue = typeof serializedValue === "string" ? serializedValue.slice(0, 15) : JSON.stringify(serializedValue).slice(0, 15);
- 
-          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(modifiedKey)} to '${previewValue}'`;          
+          currentProgress.text = `[${index}/${total}]: Setting ${chalk.yellow(modifiedKey)} to '${previewValue}'`;
 
           const end = (Number(process.hrtime.bigint() - start) / 1e6).toFixed(2);
 
@@ -82,7 +79,7 @@ module.exports = async (client, options) => {
             currentProgress.succeed(`[${index}/${total}] [${end}ms]: ${chalk.yellow(modifiedKey)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
           } catch (error) {
             currentProgress.fail(`[${index}/${total}] [${end}ms]: ${chalk.yellow(modifiedKey)} ${options.convertOldData.acknowledge ? "acknowledged write?: true" : ""}`);
-            progress.fail(`[aoi.mysql]: ${error.message}\n`);
+            ora(`[aoi.mysql]: ${error.message}\n`).fail();
 
             const logPath = join(__dirname, "../../../conversion-logs.txt");
             const logData = `${error.message}\n${JSON.stringify({ key: modifiedKey, value }, null, 2)}\n\n`;
@@ -100,6 +97,6 @@ module.exports = async (client, options) => {
     }
   }
 
-  progress.succeed("[aoi.mysql]: Transfer completed!");
-  console.warn("[aoi.mysql]: " + chalk.blue("Disable the convert option, and check if data is equal before delete database files!"));
+  ora("[aoi.mysql]: Transfer completed!").succeed();
+  console.warn("[aoi.mysql]: " + chalk.blue("Disable the convert option, and check if data is equal before deleting database files!"));
 };
