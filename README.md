@@ -26,11 +26,19 @@ const client = new AoiClient({
 });
 
 const database = new Database(client, {
-  host: " ",        
-  user: " ", 
-  password: " ",
-  database: " ",
-  port: 3306, //Not required, default 3306
+  host: "", //192.168.256.253 (DON'T PUT PORT HERE)
+  user: "", //root 
+  password: "", //mypassword123
+  database: "", //s5_test
+  port: 3306, //If your port is 3306, you can remove this
+  connectionLimit: 20,
+  tables: ["main"]
+});
+
+//OR
+
+const database = new Database(client, {
+  url: "",  //jdbc:mysql://s5_test:mypassword123@192.168.256.253:3306/s5_test
   connectionLimit: 20,
   tables: ["main"]
 });
@@ -59,11 +67,11 @@ const client = new AoiClient({
 });
 
 const database = new Database(client, {
-  host: " ",        
-  user: " ", 
-  password: " ",
-  database: " ",
-  port: 3306, //Not required, default 3306
+  host: "", //192.168.256.253 (DON'T PUT PORT HERE)
+  user: "", //root 
+  password: "", //mypassword123
+  database: "", //s5_test
+  port: 3306, //If your port is 3306, you can remove this
   connectionLimit: 20,
   tables: ["main"],
     convertOldData: {
@@ -71,6 +79,10 @@ const database = new Database(client, {
       dir: "./database"
     },
 });
+
+//OR
+
+
 
 client.variables({
     variable: "value"

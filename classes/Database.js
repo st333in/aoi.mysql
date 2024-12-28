@@ -28,24 +28,66 @@ class Database extends EventEmitter {
     });
   }
 
+  
   async connect() {
     try {
-      this.client.db = mysql.createPool({
-        host: this.options.host,
-        user: this.options.user,
-        password: this.options.password,
-        database: this.options.database,
-        port: this.options.port || 3306,
-        connectionLimit: 10,
-      });
+      if(this.options.url.length === 0){
+
+        this.client.db = mysql.createPool({
+          host: this.options.host,
+          user: this.options.user,
+          password: this.options.password,
+          database: this.options.database,
+          port: this.options.port || 3306,
+          connectionLimit: this.options.connectionLimit || 20,
+        });
+
+      } else {
+
+      const jdbcUrl = this.options.url;
+      const mysqlUrl = jdbcUrl.replace('jdbc:mysql://', '');
+      const regex = /^(?:(.*?):(.*?)@)?([^:\/]+)(?::(\d+))?(\/.*)?$/;
+      
+      const matches = mysqlUrl.match(regex);
+      
+      if (matches) {
+        const user = decodeURIComponent(matches[1] || '');
+        const password = decodeURIComponent(matches[2] || '');
+        const host = matches[3];
+        const port = matches[4] || 3306;
+        const database = matches[5] ? matches[5].slice(1) : '';
+      
+        this.client.db = mysql.createPool({
+          host: host,
+          user: user,
+          password: password,
+          database: database,
+          port: port,
+          connectionLimit: this.options.connectionLimit || 20,
+        });
+      } else {
+        throw new TypeError("The provided URL is invalid.");
+      }
+    }
+    
 
       if (!this.options.tables || this.options?.tables.length === 0) {
         throw new TypeError("Missing variable tables, please provide at least one table.");
       }
+      
+      const tableNameRegex = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+      
+      this.options.tables.forEach(table => {
+        if (!tableNameRegex.test(table)) {
+          throw new TypeError(`Table names must start with a letter or an underscore and contain only letters, numbers, and underscores.`);
+        }
+      });      
 
       if (this.options.tables.includes("__aoijs_vars__")) {
         throw new TypeError("'__aoijs_vars__' is reserved as a table name.");
       }
+
+
 
       this.client.db.tables = [...this.options.tables, "__aoijs_vars__"];
 
@@ -66,6 +108,7 @@ class Database extends EventEmitter {
       await this.ping();
 
       const pingResult = await this.ping();
+      this.client.db.ping = pingResult;
 
       if (pingResult instanceof Error) {
         throw new Error(`(${pingResult.code}) ${pingResult.message}`);
@@ -139,29 +182,31 @@ class Database extends EventEmitter {
     }
   }
 
-  async set(table, key, id, value) {
+async set(table, key, id, value) {
     let keyValue = id === undefined ? `${key}` : `${key}_${id}`;
   
     if (typeof keyValue !== 'string') {
-      console.warn(`[aoi.mysql] Invalid keyValue type: Expected string, got ${typeof keyValue}`);
-      return;
+        console.warn(`[aoi.mysql] Invalid keyValue type: Expected string, got ${typeof keyValue}`);
+        return;
     }
-  
-    if (typeof value !== 'string' && typeof value !== 'number') {
-      console.warn(`[aoi.mysql] Invalid value type: Expected string or number, got ${typeof value}`);
-      return;
+
+    if (typeof value === 'object') {
+        value = JSON.stringify(value);
+    } else if (typeof value !== 'string' && typeof value !== 'number') {
+        console.warn(`[aoi.mysql] Invalid value type: Expected string, number, or object, got ${typeof value}`);
+        return;
     }
-  
+
     try {
-      await this.client.db.promise().query(
-        `INSERT INTO ${table} (\`var\`, \`key\`, \`value\`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
-        [key, keyValue, value, value]
-      );
+        await this.client.db.promise().query(
+            `INSERT INTO ${table} (\`var\`, \`key\`, \`value\`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE \`value\` = ?`,
+            [key, keyValue, value, value]
+        );
     } catch (err) {
-      console.error('Error executing query:', err);
-      return;
+        console.error('Error executing query:', err);
+        return;
     }
-  }  
+}
 
   async drop(table, variable) {
     try {
@@ -249,24 +294,39 @@ class Database extends EventEmitter {
   async detectAndAlterFunctions() {
     const aoiMysqlDir = path.join('.', 'node_modules', 'aoi.mysql', 'functions');
     const aoiJsDir = path.join('.', 'node_modules', 'aoi.js', 'src', 'functions');
+    
+    const aoiMysqlBasePath = path.join('.', 'node_modules', 'aoi.mysql', 'functions', 'classes', 'AoiBase.js');
+    const aoiJsBasePath = path.join('.', 'node_modules', 'aoi.js', 'src', 'classes', 'AoiBase.js');
   
     const files = fs.readdirSync(aoiMysqlDir);
-  
     let altered = false;
+  
+    if (fs.existsSync(aoiMysqlBasePath) && fs.existsSync(aoiJsBasePath)) {
+      const aoiMysqlBaseContent = fs.readFileSync(aoiMysqlBasePath, 'utf8');
+      const aoiJsBaseContent = fs.readFileSync(aoiJsBasePath, 'utf8');
+      
+      if (aoiMysqlBaseContent !== aoiJsBaseContent) {
+        altered = true;
+        fs.copyFileSync(aoiMysqlBasePath, aoiJsBasePath);
+      }
+    } else {
+      altered = true;
+      fs.copyFileSync(aoiMysqlBasePath, aoiJsBasePath);
+    }
   
     for (const file of files) {
       const aoiMysqlFilePath = path.join(aoiMysqlDir, file);
       const aoiJsFilePath = path.join(aoiJsDir, file);
   
-      if (fs.existsSync(aoiJsFilePath)) {
+      if (fs.statSync(aoiMysqlFilePath).isFile() && fs.existsSync(aoiJsFilePath)) {
         const aoiMysqlContent = fs.readFileSync(aoiMysqlFilePath, 'utf8');
         const aoiJsContent = fs.readFileSync(aoiJsFilePath, 'utf8');
-  
+    
         if (aoiMysqlContent !== aoiJsContent) {
           altered = true;
           fs.copyFileSync(aoiMysqlFilePath, aoiJsFilePath);
         }
-      } else {
+      } else if (fs.statSync(aoiMysqlFilePath).isFile()) {
         altered = true;
         fs.copyFileSync(aoiMysqlFilePath, aoiJsFilePath);
       }
@@ -282,7 +342,7 @@ class Database extends EventEmitter {
       );
       process.exit(1);
     }
-  }
+  }  
 }
 
 module.exports = { Database };
