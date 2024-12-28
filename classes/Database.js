@@ -327,63 +327,51 @@ class Database extends EventEmitter {
     const aoiMysqlBasePath = path.join('.', 'node_modules', 'aoi.mysql', 'functions', 'classes', 'AoiBase.js');
     const aoiJsBasePath = path.join('.', 'node_modules', 'aoi.js', 'src', 'classes', 'AoiBase.js');
     
-    const timeoutJsPath = path.join('.', 'node_modules', 'aoi.js', 'src', 'events', 'Custom', 'timeout.js');
+    const aoiMysqlTimeoutPath = path.join('.', 'node_modules', 'aoi.mysql', 'functions', 'events', 'Custom', 'timeout.js');
+    const aoiJsTimeoutPath = path.join('.', 'node_modules', 'aoi.js', 'src', 'events', 'Custom', 'timeout.js');
 
     const files = fs.readdirSync(aoiMysqlDir);
     let altered = false;
     
-    if (fs.existsSync(aoiMysqlBasePath) && fs.existsSync(aoiJsBasePath)) {
-      const aoiMysqlBaseContent = fs.readFileSync(aoiMysqlBasePath, 'utf8');
-      const aoiJsBaseContent = fs.readFileSync(aoiJsBasePath, 'utf8');
-      
-      if (aoiMysqlBaseContent !== aoiJsBaseContent) {
+    if (fs.existsSync(aoiMysqlBasePath) && fs.existsSync(aoiJsBasePath) && fs.existsSync(aoiMysqlTimeoutPath) && fs.existsSync(aoiJsTimeoutPath)) {
+        const aoiMysqlBaseContent = fs.readFileSync(aoiMysqlBasePath, 'utf8');
+        const aoiJsBaseContent = fs.readFileSync(aoiJsBasePath, 'utf8');
+        const aoiMysqlTimeoutContent = fs.readFileSync(aoiMysqlTimeoutPath, 'utf8');
+        const aoiJsTimeoutContent = fs.readFileSync(aoiJsTimeoutPath, 'utf8');
+        
+        if (aoiMysqlBaseContent !== aoiJsBaseContent) {
+            altered = true;
+            fs.copyFileSync(aoiMysqlBasePath, aoiJsBasePath);
+        }
+        
+        if (aoiMysqlTimeoutContent !== aoiJsTimeoutContent) {
+            altered = true;
+            fs.copyFileSync(aoiMysqlTimeoutPath, aoiJsTimeoutPath);
+        }
+    } else {
         altered = true;
         fs.copyFileSync(aoiMysqlBasePath, aoiJsBasePath);
-      }
-    } else {
-      altered = true;
-      fs.copyFileSync(aoiMysqlBasePath, aoiJsBasePath);
-    }
-
-    if (fs.existsSync(timeoutJsPath)) {
-        const timeoutJsContent = fs.readFileSync(timeoutJsPath, 'utf8');
-        
-        const alteredTimeoutContent = timeoutJsContent.replace(
-            /await d\.interpreter\(d\.client, \{\}, \[\], cmd, d\.client\.db, false, undefined, \{ timeoutData \}\);/g,
-            `try {
-                const db = await d.client.db.findOne("__aoijs_vars__", setTimeout_${timeoutData.__id__});
-                if(db !== null){
-                    await d.interpreter(d.client, {}, [], cmd, d.client.db, false, undefined, { timeoutData });
-                }
-            } catch (err) {
-                return null;
-            }`
-        );
-
-        if (timeoutJsContent !== alteredTimeoutContent) {
-            altered = true;
-            fs.writeFileSync(timeoutJsPath, alteredTimeoutContent, 'utf8');
-        }
+        fs.copyFileSync(aoiMysqlTimeoutPath, aoiJsTimeoutPath);
     }
 
     for (const file of files) {
-      const aoiMysqlFilePath = path.join(aoiMysqlDir, file);
-      const aoiJsFilePath = path.join(aoiJsDir, file);
-  
-      if (fs.statSync(aoiMysqlFilePath).isFile() && fs.existsSync(aoiJsFilePath)) {
-        const aoiMysqlContent = fs.readFileSync(aoiMysqlFilePath, 'utf8');
-        const aoiJsContent = fs.readFileSync(aoiJsFilePath, 'utf8');
+        const aoiMysqlFilePath = path.join(aoiMysqlDir, file);
+        const aoiJsFilePath = path.join(aoiJsDir, file);
     
-        if (aoiMysqlContent !== aoiJsContent) {
-          altered = true;
-          fs.copyFileSync(aoiMysqlFilePath, aoiJsFilePath);
+        if (fs.statSync(aoiMysqlFilePath).isFile() && fs.existsSync(aoiJsFilePath)) {
+            const aoiMysqlContent = fs.readFileSync(aoiMysqlFilePath, 'utf8');
+            const aoiJsContent = fs.readFileSync(aoiJsFilePath, 'utf8');
+        
+            if (aoiMysqlContent !== aoiJsContent) {
+                altered = true;
+                fs.copyFileSync(aoiMysqlFilePath, aoiJsFilePath);
+            }
+        } else if (fs.statSync(aoiMysqlFilePath).isFile()) {
+            altered = true;
+            fs.copyFileSync(aoiMysqlFilePath, aoiJsFilePath);
         }
-      } else if (fs.statSync(aoiMysqlFilePath).isFile()) {
-        altered = true;
-        fs.copyFileSync(aoiMysqlFilePath, aoiJsFilePath);
-      }
     }
-  
+
     if (altered) {
       AoiError.createConsoleMessage(
         [
