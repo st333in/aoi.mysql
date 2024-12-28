@@ -32,7 +32,8 @@ const database = new Database(client, {
   database: "", //s5_test
   port: 3306, //If your port is 3306, you can remove this
   connectionLimit: 20,
-  tables: ["main"]
+  tables: ["main"],
+  autoUpdatr: true
 });
 
 //OR
@@ -41,6 +42,7 @@ const database = new Database(client, {
   url: "",  //jdbc:mysql://s5_test:mypassword123@192.168.256.253:3306/s5_test
   connectionLimit: 20,
   tables: ["main"]
+  autoUpdate: true,
 });
 
 client.variables({
@@ -78,11 +80,17 @@ const database = new Database(client, {
       enabled: true,
       dir: "./database"
     },
+  autoUpdate: true
 });
 
 //OR
 
-
+const database = new Database(client, {
+  url: "",  //jdbc:mysql://s5_test:mypassword123@192.168.256.253:3306/s5_test
+  connectionLimit: 20,
+  tables: ["main"],
+  autoUpdate: true
+});
 
 client.variables({
     variable: "value"

@@ -4,6 +4,7 @@ const Interpreter = require("aoi.js/src/core/interpreter.js");
 const EventEmitter = require("events");
 const fs = require("fs");
 const path = require("path");
+const https = require("https");
 
 class Database extends EventEmitter {
   constructor(client, options) {
@@ -28,7 +29,6 @@ class Database extends EventEmitter {
     });
   }
 
-  
   async connect() {
     try {
       if(this.options.url.length === 0){
@@ -114,18 +114,22 @@ class Database extends EventEmitter {
         throw new Error(`(${pingResult.code}) ${pingResult.message}`);
       }
 
-      if (this.options.logging !== false) {
-        const { version } = require("../package.json");
-        AoiError.createConsoleMessage(
-          [
-            { text: `Successfully connected to MariaDB`, textColor: "white" },
-            { text: `Server Latency: ${pingResult}ms`, textColor: "white" },
-            { text: `Installed on v${version}`, textColor: "green" },
-          ],
-          "white",
-          { text: " aoi.mysql  ", textColor: "cyan" }
-        );
-      }
+      const { version } = require("../package.json");
+      const latestVersion = await this.checkLatestVersion();
+
+      let versionMessage = latestVersion ? `New version available: v${latestVersion}` : `Installed on v${version}`;
+      let versionColor = latestVersion ? "yellow" : "green";
+
+      AoiError.createConsoleMessage(
+        [
+          { text: "Successfully connected to MariaDB", textColor: "white" },
+          { text: `Server Latency: ${pingResult}ms`, textColor: "white" },
+          { text: ` `, textColor: "white" },
+          { text: `${versionMessage}`, textColor: versionColor },
+        ],
+        "white",
+        { text: " aoi.mysql  ", textColor: "cyan" }
+      );
 
       for (const table of this.client.db.tables) {
         await this.checkAndCreateTable(table);
@@ -137,9 +141,21 @@ class Database extends EventEmitter {
       throw new Error(`${err.message}`);
     }
 
-    if (this.options.convertOldData && this.options.convertOldData.enabled === true) {
-      await this.transfer();
-    }    
+    if (this.options.autoUpdate === true) {
+      const isNewVersionAvailable = await this.hasNewVersion();
+      if (isNewVersionAvailable) {
+        await this.updater()
+      } else {
+          if (this.options.convertOldData && this.options.convertOldData.enabled === true) {
+              await this.transfer();
+          }
+      }
+  } else {
+      if (this.options.convertOldData && this.options.convertOldData.enabled === true) {
+          await this.transfer();
+      }
+  }
+  
   }
 
   async ping() {
@@ -182,7 +198,7 @@ class Database extends EventEmitter {
     }
   }
 
-async set(table, key, id, value) {
+  async set(table, key, id, value) {
     let keyValue = id === undefined ? `${key}` : `${key}_${id}`;
   
     if (typeof keyValue !== 'string') {
@@ -206,7 +222,7 @@ async set(table, key, id, value) {
         console.error('Error executing query:', err);
         return;
     }
-}
+  }
 
   async drop(table, variable) {
     try {
@@ -279,6 +295,19 @@ async set(table, key, id, value) {
     }
   }
 
+  async updater() {
+    const updateFilePath = path.join(__dirname, "Updater.js");
+
+    if (fs.existsSync(updateFilePath)) {
+      try {
+        const updater = require(updateFilePath);
+        updater(this.client, this.options);
+      } catch (error) {
+        return;
+      }
+    }
+  }
+
   async checkAndCreateTable(table) {
     try {
       const [rows] = await this.client.db.promise().query(`SHOW TABLES LIKE ?`, [table]);
@@ -297,10 +326,12 @@ async set(table, key, id, value) {
     
     const aoiMysqlBasePath = path.join('.', 'node_modules', 'aoi.mysql', 'functions', 'classes', 'AoiBase.js');
     const aoiJsBasePath = path.join('.', 'node_modules', 'aoi.js', 'src', 'classes', 'AoiBase.js');
-  
+    
+    const timeoutJsPath = path.join('.', 'node_modules', 'aoi.js', 'src', 'events', 'Custom', 'timeout.js');
+
     const files = fs.readdirSync(aoiMysqlDir);
     let altered = false;
-  
+    
     if (fs.existsSync(aoiMysqlBasePath) && fs.existsSync(aoiJsBasePath)) {
       const aoiMysqlBaseContent = fs.readFileSync(aoiMysqlBasePath, 'utf8');
       const aoiJsBaseContent = fs.readFileSync(aoiJsBasePath, 'utf8');
@@ -313,7 +344,28 @@ async set(table, key, id, value) {
       altered = true;
       fs.copyFileSync(aoiMysqlBasePath, aoiJsBasePath);
     }
-  
+
+    if (fs.existsSync(timeoutJsPath)) {
+        const timeoutJsContent = fs.readFileSync(timeoutJsPath, 'utf8');
+        
+        const alteredTimeoutContent = timeoutJsContent.replace(
+            /await d\.interpreter\(d\.client, \{\}, \[\], cmd, d\.client\.db, false, undefined, \{ timeoutData \}\);/g,
+            `try {
+                const db = await d.client.db.findOne("__aoijs_vars__", setTimeout_${timeoutData.__id__});
+                if(db !== null){
+                    await d.interpreter(d.client, {}, [], cmd, d.client.db, false, undefined, { timeoutData });
+                }
+            } catch (err) {
+                return null;
+            }`
+        );
+
+        if (timeoutJsContent !== alteredTimeoutContent) {
+            altered = true;
+            fs.writeFileSync(timeoutJsPath, alteredTimeoutContent, 'utf8');
+        }
+    }
+
     for (const file of files) {
       const aoiMysqlFilePath = path.join(aoiMysqlDir, file);
       const aoiJsFilePath = path.join(aoiJsDir, file);
@@ -342,7 +394,42 @@ async set(table, key, id, value) {
       );
       process.exit(1);
     }
-  }  
+  }
+
+  async checkLatestVersion() {
+    return new Promise((resolve, reject) => {
+        https.get('https://registry.npmjs.org/aoi.mysql', (res) => {
+            let data = '';
+            res.on('data', chunk => {
+                data += chunk;
+            });
+            res.on('end', () => {
+                try {
+                    const jsonData = JSON.parse(data);
+                    const latestVersion = jsonData['dist-tags'] ? jsonData['dist-tags'].latest : null;
+                    const currentVersion = require("../package.json").version;
+                    resolve(latestVersion && latestVersion !== currentVersion ? latestVersion : null);
+                } catch (err) {
+                    console.error('Error parsing version data:', err);
+                    reject(new Error('Failed to fetch latest version'));
+                }
+            });
+        }).on('error', (err) => {
+            console.error('Error fetching version:', err);
+            reject(err);
+        });
+    });
+}
+
+async hasNewVersion() {
+  try {
+      const latestVersion = await this.checkLatestVersion();
+      return latestVersion !== null;
+  } catch (error) {
+      console.error("Erro ao verificar a versão:", error);
+      return false;
+  }
+}
 }
 
 module.exports = { Database };

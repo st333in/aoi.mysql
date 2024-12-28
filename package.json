@@ -1,6 +1,6 @@
 {
   "name": "aoi.mysql",
-  "version": "1.1.0-beta",
+  "version": "1.1.1-beta",
   "description": "Package which brings MySQL support to aoi.js",
   "main": "./classes/Database.js",
   "license": "ISC",
