@@ -137,9 +137,9 @@ class Database extends EventEmitter {
       throw new Error(`${err.message}`);
     }
 
-    if (this.options.convertOldData.enabled === true) {
+    if (this.options.convertOldData && this.options.convertOldData.enabled === true) {
       await this.transfer();
-    }
+    }    
   }
 
   async ping() {
